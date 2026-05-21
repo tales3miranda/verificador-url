@@ -16,9 +16,14 @@ PESOS = {
     "arroba_na_url": 25,
     "tld_no_subdominio": 20,
     "muitos_subdominios": 15,
+    "muitos_hifens": 10,
+    "url_muito_longa": 10,
+    "dominio_com_marca_e_hifen": 20,
     "tld_suspeito": 20,
     "palavra_gatilho": 10,
     "marca_fora_do_dominio": 30,
+    "punycode": 25,
+    "porta_fora_do_padrao": 15,
 }
 
 # Palavras que phishing adora colocar na URL pra dar aquele ar de "oficial".
@@ -126,11 +131,29 @@ def analisar(url):
         pontuacao += PESOS["arroba_na_url"]
         motivos.append("Tem um '@' na URL, que pode esconder o destino real.")
 
+    if len(url) > 75:
+        pontuacao += PESOS["url_muito_longa"]
+        motivos.append(f"URL longa demais ({len(url)} caracteres).")
+
     achadas = [palavra for palavra in GATILHOS if palavra in host or palavra in caminho]
     if achadas:
         pontuacao += PESOS["palavra_gatilho"]
         motivos.append("Tem palavra de isca na URL: " + ", ".join(achadas) + ".")
 
+    if "xn--" in host:
+        pontuacao += PESOS["punycode"]
+        motivos.append("Domínio em punycode (xn--), usado pra imitar letras de marcas.")
+
+    try:
+        porta = dados.port
+    except ValueError:
+        porta = None
+    if porta not in (None, 80, 443):
+        pontuacao += PESOS["porta_fora_do_padrao"]
+        motivos.append(f"Acessa por uma porta fora do padrão ({porta}).")
+
+    # As checagens abaixo só fazem sentido quando o host é um domínio mesmo,
+    # e não um IP.
     if not eh_endereco_ip:
         subs = subdominios(host)
         subs_uteis = [s for s in subs if s != "www"]
@@ -143,6 +166,19 @@ def analisar(url):
         if len(subs_uteis) >= 2:
             pontuacao += PESOS["muitos_subdominios"]
             motivos.append(f"Tem subdomínios demais ({'.'.join(subs)}).")
+
+        if base.count("-") >= 2:
+            pontuacao += PESOS["muitos_hifens"]
+            motivos.append("O domínio tem muitos hífens, coisa que site sério evita.")
+
+        marca_no_base = ""
+        for marca in MARCAS:
+            if marca in base and marca != base:
+                marca_no_base = marca
+                break
+        if "-" in base and marca_no_base:
+            pontuacao += PESOS["dominio_com_marca_e_hifen"]
+            motivos.append(f"Mistura a marca '{marca_no_base}' com hífen no domínio.")
 
         tld = host.rsplit(".", 1)[-1] if "." in host else ""
         if tld in TLDS_SUSPEITOS:
