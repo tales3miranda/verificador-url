@@ -3,6 +3,8 @@ Detector de phishing baseado na análise da URL.
 
 A ideia é simples: cada característica suspeita da URL soma alguns pontos.
 No fim a gente olha o total e decide se a coisa cheira a golpe ou não.
+As checagens que dependem de internet (DNS, WHOIS, redirecionamento) ficam
+no módulo verificacoes_online e só rodam quando 'offline' é False.
 """
 
 import ipaddress
@@ -24,6 +26,11 @@ PESOS = {
     "marca_fora_do_dominio": 30,
     "punycode": 25,
     "porta_fora_do_padrao": 15,
+    # daqui pra baixo só rola com internet
+    "dns_nao_resolve": 30,
+    "dominio_recem_criado": 30,
+    "dominio_meio_novo": 15,
+    "redireciona_pra_outro_dominio": 20,
 }
 
 # Palavras que phishing adora colocar na URL pra dar aquele ar de "oficial".
@@ -55,6 +62,7 @@ TLDS_DE_VERDADE = {"com", "net", "org", "gov", "edu", "co", "io"}
 
 # Alguns TLDs compostos pra não tratar "bradesco.com.br" como se o domínio
 # fosse só "com.br".
+# TODO: um dia trocar essa gambiarra por uma lib de TLD de verdade (tldextract).
 TLDS_COMPOSTOS = {
     "com.br", "net.br", "org.br", "gov.br", "edu.br",
     "co.uk", "com.au", "co.jp",
@@ -100,7 +108,14 @@ def classificar(pontuacao):
     return "provavelmente seguro"
 
 
-def analisar(url):
+def analisar(url, offline=False, timeout=5):
+    """
+    Analisa uma URL e devolve um dicionário com a pontuação de risco (0 a 100),
+    a classificação e a lista de motivos que levaram àquela nota.
+
+    offline=True pula tudo que depende de internet (útil pra testar ou pra
+    rodar em lugar sem rede).
+    """
     url = url.strip()
     dados = urlparse(url)
     if not dados.scheme:
@@ -198,6 +213,11 @@ def analisar(url):
                 f"'{dominio_principal(host)}'."
             )
 
+    if not offline:
+        extra, mais_motivos = _checar_online(url, host, timeout)
+        pontuacao += extra
+        motivos += mais_motivos
+
     pontuacao = min(pontuacao, 100)
     return {
         "url": url,
@@ -205,3 +225,32 @@ def analisar(url):
         "classificacao": classificar(pontuacao),
         "motivos": motivos,
     }
+
+
+def _checar_online(url, host, timeout):
+    # Importo aqui dentro de propósito: assim quem só quer a análise do texto
+    # da URL consegue usar o detector sem instalar requests/python-whois.
+    from verificacoes_online import resolve_dns, idade_em_dias, destino_final
+
+    if not resolve_dns(host, timeout):
+        return PESOS["dns_nao_resolve"], ["O domínio não resolve no DNS (talvez nem exista)."]
+
+    pontos = 0
+    motivos = []
+
+    idade = idade_em_dias(host)
+    if idade is not None and idade < 30:
+        pontos += PESOS["dominio_recem_criado"]
+        motivos.append(f"Domínio criado faz só {idade} dias — recém-nascido é bandeira vermelha.")
+    elif idade is not None and idade < 90:
+        pontos += PESOS["dominio_meio_novo"]
+        motivos.append(f"Domínio ainda novo, com {idade} dias de vida.")
+
+    destino = destino_final(url, timeout)
+    if destino:
+        host_final = (urlparse(destino).hostname or "").lower()
+        if host_final and host_final != host:
+            pontos += PESOS["redireciona_pra_outro_dominio"]
+            motivos.append(f"Redireciona pra outro domínio: {host_final}")
+
+    return pontos, motivos

@@ -3,6 +3,7 @@ Linha de comando do detector.
 
 Exemplos:
     python cli.py https://paypal.com.login-seguro.xyz/conta
+    python cli.py --offline exemplo.com
     python cli.py --json site-suspeito.tk
 """
 
@@ -27,6 +28,10 @@ def montar_argumentos():
         description="Analisa uma URL e diz se ela cheira a phishing."
     )
     parser.add_argument("url", help="a URL que você quer checar")
+    parser.add_argument("--offline", action="store_true",
+                        help="não usa internet (pula DNS, WHOIS e redirecionamento)")
+    parser.add_argument("--timeout", type=int, default=5,
+                        help="tempo limite das checagens online, em segundos")
     parser.add_argument("--json", action="store_true",
                         help="mostra o resultado em JSON")
     return parser.parse_args()
@@ -46,7 +51,7 @@ def imprimir_bonito(resultado):
 
 def main():
     args = montar_argumentos()
-    resultado = analisar(args.url)
+    resultado = analisar(args.url, offline=args.offline, timeout=args.timeout)
 
     if args.json:
         print(json.dumps(resultado, ensure_ascii=False, indent=2))
