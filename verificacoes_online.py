@@ -15,7 +15,7 @@ import whois
 
 # Alguns sites bloqueiam quem não manda um User-Agent de navegador.
 CABECALHOS = {
-    "User-Agent": "Mozilla/5.0 (compatible; verificador-de-url/1.0)"
+    "User-Agent": "Mozilla/5.0 (compatible; verificador-url/1.0)"
 }
 
 

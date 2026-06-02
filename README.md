@@ -1,4 +1,4 @@
-# verificador-de-url
+# verificador-url
 
 Um detector de phishing que olha pra **URL** e tenta dizer se ela é confiável ou se cheira a golpe. Não é mágica nem IA — é um monte de regra baseada nas manhas que sites de phishing costumam usar (IP no lugar do domínio, marca famosa no subdomínio errado, domínio registrado ontem, etc). Cada sinal suspeito soma pontos e, no fim, a URL recebe uma nota de 0 a 100.
 
